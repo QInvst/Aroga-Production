@@ -1,0 +1,41 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  azureSubscription: 'AzureServiceConnection'
+  appName: 'Qinvst-App'
+  pythonVersion: '3.10'
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '$(pythonVersion)'
+    addToPath: true
+
+- script: |
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+  displayName: 'Install dependencies'
+
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
+    includeRootFolder: false
+    archiveType: 'zip'
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName: 'drop'
+
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: '$(azureSubscription)'
+    appName: '$(appName)'
+    package: '$(Build.ArtifactStagingDirectory)/app.zip'

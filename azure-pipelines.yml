@@ -6,6 +6,7 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
+
 variables:
   azureSubscription: 'AzureServiceConnection'
   appName: 'Qinvst-App'

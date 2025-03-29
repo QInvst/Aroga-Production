@@ -1,84 +1,126 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HTML Data Extractor</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: url('') no-repeat center center fixed;
-            background-size: cover;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            background: rgba(0, 0, 0, 0.7);
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            color: white;
-            width: 40%;
-            min-width: 350px;
-        }
-        h2 {
-            margin-bottom: 20px;
-        }
-        input {
-            width: 80%;
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            margin-bottom: 10px;
-        }
-        button {
-            padding: 10px 20px;
-            background: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background 0.3s ease;
-        }
-        button:hover {
-            background: #218838;
-        }
-        #status {
-            margin-top: 15px;
-            font-size: 14px;
-        }
-    </style>
-    <script>
-        async function submitUrl() {
-            const url = document.getElementById("html_url").value;
-            if (!url) {
-                alert("Please enter a valid URL");
-                return;
-            }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>QINVST Data Extractor</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
 
-            document.getElementById("status").innerText = "Processing...";
-            
-            const response = await fetch("/process", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ html_url: url })
-            });
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
 
-            const data = await response.json();
-            document.getElementById("status").innerText = data.message;
-        }
-    </script>
+    /* 🔥 Fullscreen video background */
+    #bg-video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      min-width: 100%;
+      min-height: 100%;
+      object-fit: cover;
+      z-index: -1;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      background: transparent; /* 💡 No black background */
+      padding: 30px;
+      border-radius: 12px;
+      text-align: center;
+      color: white;
+      width: 40%;
+      min-width: 350px;
+      margin: auto;
+      top: 50%;
+      transform: translateY(-50%);
+      box-shadow: none; /* Optional: remove glow */
+    }
+
+    .logo {
+      max-width: 150px;
+      margin-bottom: 15px;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+    }
+
+    input {
+      width: 80%;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      margin-bottom: 10px;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #28a745;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    button:hover {
+      background: #218838;
+    }
+
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+    }
+  </style>
+
+  <script>
+    async function submitUrl() {
+      const url = document.getElementById("html_url").value;
+      if (!url) {
+        alert("Please enter a valid URL");
+        return;
+      }
+
+      document.getElementById("status").innerText = "Processing...";
+
+      const response = await fetch("/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html_url: url })
+      });
+
+      const data = await response.json();
+      document.getElementById("status").innerText = data.message;
+    }
+  </script>
 </head>
 <body>
-    <div class="container">
-        <h2>QINVST Data Extractor</h2>
-        <input type="text" id="html_url" placeholder="Enter file URL (e.g., file:///C:/path/to/file.html)">
-        <br>
-        <button onclick="submitUrl()">Extract & Upload</button>
-        <p id="status"></p>
-    </div>
+
+  <!-- ✅ Video background -->
+  <video autoplay muted loop id="bg-video">
+    <source src="{{ video_url }}" type="video/mp4">
+    Your browser does not support HTML5 video.
+  </video>
+
+  <!-- ✅ Main container -->
+  <div class="container">
+    <!-- ✅ Logo -->
+    <img src="{{ logo_url }}" alt="QINVST Logo" class="logo" />
+
+    <h2>QINVST Data Extractor</h2>
+    <input type="text" id="html_url" placeholder="Enter file URL (e.g., file:///C:/path/to/file.html)">
+    <br>
+    <button onclick="submitUrl()">Extract & Upload</button>
+    <p id="status"></p>
+  </div>
+
 </body>
 </html>

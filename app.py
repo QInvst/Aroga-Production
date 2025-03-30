@@ -1,8 +1,6 @@
 from flask import Flask, request, render_template, jsonify
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
+import requests
 import pandas as pd
 from azure.storage.blob import BlobServiceClient
 import io
@@ -21,39 +19,38 @@ AZURE_CONTAINER_NAME = os.getenv("AZURE_CONTAINER_NAME")
 RAW_FILE = "output_combined.xlsx"
 CLEANED_FILE = "cleaned_output_combined.xlsx"
 
-# Extract all sections by heading name
-def extract_all_tables(driver):
+# ✅ Extract tables using BeautifulSoup
+def extract_all_tables(html_content):
+    soup = BeautifulSoup(html_content, "html.parser")
     tables_data = []
 
-    WebDriverWait(driver, 15).until(EC.presence_of_all_elements_located((By.TAG_NAME, "table")))
-    possible_headers = driver.find_elements(By.XPATH, "//*[contains(text(), 'Records')]")
+    headers = soup.find_all(string=re.compile(r"(Paid|Refused|In Hold)\s+Records", re.IGNORECASE))
 
-    for header in possible_headers:
-        text = header.text.strip()
-        match = re.search(r"(Paid|Refused|In Hold)\s+Records", text, re.IGNORECASE)
+    for header in headers:
+        parent = header.find_parent()
+        if not parent:
+            continue
 
+        match = re.search(r"(Paid|Refused|In Hold)\s+Records", header, re.IGNORECASE)
         if match:
-            record_type = match.group(1).strip().capitalize()
-
-            try:
-                table = header.find_element(By.XPATH, "following::table[1]")
-                headers = [th.text.strip() for th in table.find_elements(By.TAG_NAME, "th")]
-                rows = table.find_elements(By.TAG_NAME, "tr")
-
-                data = []
-                for row in rows:
-                    cols = [col.text.strip() for col in row.find_elements(By.TAG_NAME, "td")]
-                    if cols:
-                        data.append(cols)
-
-                if data:
-                    df = pd.DataFrame(data, columns=headers)
-                    df["Record_Type"] = record_type
-                    tables_data.append(df)
-
-            except Exception as e:
-                print(f"Skipping section {text} due to error: {e}")
+            record_type = match.group(1).capitalize()
+            next_table = parent.find_next("table")
+            if not next_table:
                 continue
+
+            rows = next_table.find_all("tr")
+            table_data = []
+
+            for row in rows:
+                cols = [td.get_text(strip=True) for td in row.find_all("td")]
+                if cols:
+                    table_data.append(cols)
+
+            headers_row = [th.get_text(strip=True) for th in next_table.find_all("th")]
+            if table_data:
+                df = pd.DataFrame(table_data, columns=headers_row)
+                df["Record_Type"] = record_type
+                tables_data.append(df)
 
     return tables_data
 
@@ -104,7 +101,6 @@ def process_and_clean_data():
         df_cleaned["Comments"] = df_cleaned["Comments"].str.replace(r"\[\d+(\.\d+)?\]\s*", "", regex=True)
         df_cleaned.reset_index(drop=True, inplace=True)
 
-        # Rename columns to match Azure SQL schema
         df_cleaned.rename(columns={
             "SEQ NUMBER": "SeqNumber",
             "SERVICE DATE": "ServiceDate",
@@ -120,7 +116,6 @@ def process_and_clean_data():
             "Comments": "Comments"
         }, inplace=True)
 
-        # Clean and convert currency columns to float
         currency_columns = ["Billed", "Adjust", "Paid"]
         for col in currency_columns:
             if col in df_cleaned.columns:
@@ -139,18 +134,14 @@ def process_and_clean_data():
     except Exception as e:
         print(f"Error in cleaning process: {e}")
 
-
-# Main process function
+# ✅ Main function to fetch HTML and process
 def process_html_file(html_url):
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    driver = webdriver.Chrome(options=options)
-
     try:
-        driver.get(html_url)
-        time.sleep(2)
+        response = requests.get(html_url)
+        if response.status_code != 200:
+            return f"Failed to fetch HTML content: {response.status_code}"
 
-        all_tables = extract_all_tables(driver)
+        all_tables = extract_all_tables(response.text)
         if not all_tables:
             return "No valid tables found."
 
@@ -163,27 +154,18 @@ def process_html_file(html_url):
 
     except Exception as e:
         return f"Error: {e}"
-    finally:
-        driver.quit()
 
 # Routes
 @app.route("/")
 def index():
-    return render_template(
-        "index.html",
-        video_url="/static/dynamic.mp4",
-        logo_url="/static/logo.jpg"
-    )
-
+    return render_template("index.html", video_url="/static/dynamic.mp4", logo_url="/static/logo.jpg")
 
 @app.route("/process", methods=["POST"])
 def process():
     data = request.json
     html_url = data.get("html_url")
-
     if not html_url:
         return jsonify({"error": "No URL provided"}), 400
-
     result = process_html_file(html_url)
     return jsonify({"message": result})
 

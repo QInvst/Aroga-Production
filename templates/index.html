@@ -5,10 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>QINVST Data Extractor</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     body, html {
       margin: 0;
       padding: 0;
@@ -16,8 +13,7 @@
       overflow: hidden;
       font-family: Arial, sans-serif;
     }
-
-    /* 🔥 Fullscreen video background */
+    /* Fullscreen video background */
     #bg-video {
       position: fixed;
       top: 0;
@@ -27,11 +23,10 @@
       object-fit: cover;
       z-index: -1;
     }
-
     .container {
       position: relative;
       z-index: 1;
-      background: transparent; /* 💡 No black background */
+      background: transparent;
       padding: 30px;
       border-radius: 12px;
       text-align: center;
@@ -41,26 +36,21 @@
       margin: auto;
       top: 50%;
       transform: translateY(-50%);
-      box-shadow: none; /* Optional: remove glow */
     }
-
     .logo {
       max-width: 150px;
       margin-bottom: 15px;
     }
-
     h2 {
       margin-bottom: 20px;
     }
-
-    input {
+    input[type="text"] {
       width: 80%;
       padding: 10px;
       border: none;
       border-radius: 5px;
       margin-bottom: 10px;
     }
-
     button {
       padding: 10px 20px;
       background: #28a745;
@@ -70,57 +60,125 @@
       cursor: pointer;
       transition: background 0.3s ease;
     }
-
-    button:hover {
-      background: #218838;
-    }
-
+    button:hover { background: #218838; }
     #status {
       margin-top: 15px;
       font-size: 14px;
     }
+    /* Drag and drop styles */
+    #drop-area {
+      border: 2px dashed #ccc;
+      border-radius: 10px;
+      padding: 30px;
+      text-align: center;
+      color: #fff;
+      margin-top: 20px;
+      background: rgba(0,0,0,0.4);
+    }
+    #drop-area.hover {
+      border-color: #00f;
+      background: rgba(0,0,0,0.6);
+    }
+    #drop-area p {
+      margin: 0;
+      font-size: 16px;
+    }
   </style>
-
   <script>
+    // Function to submit URL-based extraction
     async function submitUrl() {
       const url = document.getElementById("html_url").value;
       if (!url) {
         alert("Please enter a valid URL");
         return;
       }
-
       document.getElementById("status").innerText = "Processing...";
-
       const response = await fetch("/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ html_url: url })
       });
-
       const data = await response.json();
       document.getElementById("status").innerText = data.message;
+    }
+
+    // Drag and drop file upload functionality
+    window.addEventListener("DOMContentLoaded", function() {
+      const dropArea = document.getElementById("drop-area");
+      const fileInput = document.getElementById("fileElem");
+      const statusText = document.getElementById("status");
+
+      dropArea.addEventListener("dragover", e => {
+        e.preventDefault();
+        dropArea.classList.add("hover");
+      });
+
+      dropArea.addEventListener("dragleave", e => {
+        e.preventDefault();
+        dropArea.classList.remove("hover");
+      });
+
+      dropArea.addEventListener("drop", e => {
+        e.preventDefault();
+        dropArea.classList.remove("hover");
+        const file = e.dataTransfer.files[0];
+        if (file) {
+          uploadFile(file);
+        }
+      });
+
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files.length > 0) {
+          uploadFile(fileInput.files[0]);
+        }
+      });
+    });
+
+    async function uploadFile(file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      document.getElementById("status").innerText = "Uploading file...";
+      try {
+        const response = await fetch("/upload", {
+          method: "POST",
+          body: formData
+        });
+        const data = await response.json();
+        document.getElementById("status").innerText = data.message;
+      } catch (err) {
+        document.getElementById("status").innerText = "File upload failed.";
+        console.error(err);
+      }
     }
   </script>
 </head>
 <body>
-
-  <!-- ✅ Video background -->
+  <!-- Video background -->
   <video autoplay muted loop id="bg-video">
     <source src="{{ video_url }}" type="video/mp4">
     Your browser does not support HTML5 video.
   </video>
 
-  <!-- ✅ Main container -->
+  <!-- Main container -->
   <div class="container">
-    <!-- ✅ Logo -->
+    <!-- Logo -->
     <img src="{{ logo_url }}" alt="QINVST Logo" class="logo" />
 
     <h2>QINVST Data Extractor</h2>
-    <input type="text" id="html_url" placeholder="Enter file URL (e.g., file:///C:/path/to/file.html)">
+    
+    <!-- URL input for remote processing -->
+    <input type="text" id="html_url" placeholder="Enter remote file URL">
     <br>
     <button onclick="submitUrl()">Extract & Upload</button>
+    
+    <!-- Drag and drop file upload area -->
+    <div id="drop-area">
+      <p>Drag and drop an HTML file here or click to select</p>
+      <input type="file" id="fileElem" accept=".html" style="display:none">
+      <button onclick="document.getElementById('fileElem').click()">Select File</button>
+    </div>
+    
     <p id="status"></p>
   </div>
-
 </body>
 </html>

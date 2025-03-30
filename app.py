@@ -134,7 +134,7 @@ def process_and_clean_data():
     except Exception as e:
         print(f"Error in cleaning process: {e}")
 
-# ✅ Main function to fetch HTML and process
+# ✅ Main function to fetch HTML and process from URL
 def process_html_file(html_url):
     try:
         response = requests.get(html_url)
@@ -154,6 +154,29 @@ def process_html_file(html_url):
 
     except Exception as e:
         return f"Error: {e}"
+
+# ✅ New route to support file upload
+@app.route("/upload", methods=["POST"])
+def upload():
+    file = request.files.get("file")
+    if not file or not file.filename.endswith(".html"):
+        return jsonify({"message": "Please upload a valid HTML file"}), 400
+
+    try:
+        html_content = file.read().decode("utf-8")
+        all_tables = extract_all_tables(html_content)
+        if not all_tables:
+            return jsonify({"message": "No valid tables found."})
+
+        combined_df = pd.concat(all_tables, ignore_index=True)
+        combined_df.to_excel(RAW_FILE, index=False)
+
+        upload_to_azure_blob(RAW_FILE, RAW_FILE)
+        process_and_clean_data()
+
+        return jsonify({"message": "File processed and uploaded to Azure!"})
+    except Exception as e:
+        return jsonify({"message": f"Error: {str(e)}"}), 500
 
 # Routes
 @app.route("/")

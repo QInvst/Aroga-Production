@@ -6,20 +6,41 @@ from azure.storage.blob import BlobServiceClient
 import io
 import os
 import re
-import time
+import uuid
+from datetime import datetime
 from dotenv import load_dotenv
 
 app = Flask(__name__)
 
-# .env file setup
+# .env setup
 load_dotenv()
 AZURE_CONNECTION_STRING = os.getenv("AZURE_CONNECTION_STRING")
 AZURE_CONTAINER_NAME = os.getenv("AZURE_CONTAINER_NAME")
 
 RAW_FILE = "output_combined.xlsx"
 CLEANED_FILE = "cleaned_output_combined.xlsx"
+CSV_FILE_NAME = "csvfile.csv"
+CSV_METADATA_NAME = "metadatafile.csv"
 
-# ✅ Extract tables using BeautifulSoup
+# ✨ Upload to Azure Blob
+
+def upload_to_azure_blob(file_data_or_path, blob_name, is_path=True):
+    try:
+        blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
+        container_client = blob_service_client.get_container_client(AZURE_CONTAINER_NAME)
+
+        if is_path:
+            with open(file_data_or_path, "rb") as data:
+                container_client.upload_blob(name=blob_name, data=data, overwrite=True)
+        else:
+            container_client.upload_blob(name=blob_name, data=file_data_or_path, overwrite=True)
+
+        print(f"✅ Uploaded to Azure Blob: {blob_name}")
+    except Exception as e:
+        print(f"❌ Upload error: {e}")
+
+
+# ✅ Extract HTML tables using BeautifulSoup
 def extract_all_tables(html_content):
     soup = BeautifulSoup(html_content, "html.parser")
     tables_data = []
@@ -54,19 +75,8 @@ def extract_all_tables(html_content):
 
     return tables_data
 
-# Upload to Azure Blob
-def upload_to_azure_blob(local_file_path, blob_name):
-    try:
-        blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
-        container_client = blob_service_client.get_container_client(AZURE_CONTAINER_NAME)
 
-        with open(local_file_path, "rb") as data:
-            container_client.upload_blob(name=blob_name, data=data, overwrite=True)
-            print(f"Uploaded to Azure Blob: {blob_name}")
-    except Exception as e:
-        print(f"Upload error: {e}")
-
-# Data transformation and upload
+# ✅ Clean and transform downloaded Excel file from Blob
 def process_and_clean_data():
     try:
         blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
@@ -75,8 +85,7 @@ def process_and_clean_data():
 
         download_stream = blob_client.download_blob()
         df = pd.read_excel(io.BytesIO(download_stream.readall()))
-
-        print("Data fetched successfully from Azure!")
+        print("✅ Data fetched successfully from Azure!")
 
         if "Comments" not in df.columns:
             df["Comments"] = None
@@ -129,12 +138,13 @@ def process_and_clean_data():
 
         df_cleaned.to_excel(CLEANED_FILE, index=False)
         upload_to_azure_blob(CLEANED_FILE, CLEANED_FILE)
-        print(f"Cleaned data uploaded as {CLEANED_FILE}")
+        print(f"✅ Cleaned data uploaded as {CLEANED_FILE}")
 
     except Exception as e:
-        print(f"Error in cleaning process: {e}")
+        print(f"❌ Error in cleaning process: {e}")
 
-# ✅ Main function to fetch HTML and process from URL
+
+# ✅ Process HTML URL
 def process_html_file(html_url):
     try:
         response = requests.get(html_url)
@@ -155,7 +165,7 @@ def process_html_file(html_url):
     except Exception as e:
         return f"Error: {e}"
 
-# ✅ New route to support file upload
+
 @app.route("/upload", methods=["POST"])
 def upload():
     file = request.files.get("file")
@@ -174,14 +184,47 @@ def upload():
         upload_to_azure_blob(RAW_FILE, RAW_FILE)
         process_and_clean_data()
 
-        return jsonify({"message": "File processed and uploaded to Azure!"})
+        return jsonify({"message": "HTML file processed and uploaded to Azure!"})
     except Exception as e:
         return jsonify({"message": f"Error: {str(e)}"}), 500
 
-# Routes
+
+@app.route("/upload_csv", methods=["POST"])
+def upload_csv():
+    file = request.files.get("file")
+    label = request.form.get("label", "No Label")
+    user_id = request.form.get("user_id", "anonymous")
+
+    if not file or not file.filename.endswith(".csv"):
+        return jsonify({"message": "Please upload a valid CSV file"}), 400
+
+    try:
+        # Always overwrite the single CSV and metadata files
+        upload_to_azure_blob(file.read(), CSV_FILE_NAME, is_path=False)
+
+        metadata_df = pd.DataFrame([{
+            "upload_id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "filename": file.filename,
+            "label": label,
+            "uploaded_at": datetime.utcnow().isoformat(),
+            "source_type": "csv"
+        }])
+
+        metadata_buffer = io.StringIO()
+        metadata_df.to_csv(metadata_buffer, index=False)
+        upload_to_azure_blob(metadata_buffer.getvalue(), CSV_METADATA_NAME, is_path=False)
+
+        return jsonify({"message": "CSV and metadata uploaded (overwritten)."})
+
+    except Exception as e:
+        return jsonify({"message": f"Error uploading CSV: {str(e)}"}), 500
+
+
 @app.route("/")
 def index():
     return render_template("index.html", video_url="/static/dynamic.mp4", logo_url="/static/logo.jpg")
+
 
 @app.route("/process", methods=["POST"])
 def process():
@@ -191,6 +234,7 @@ def process():
         return jsonify({"error": "No URL provided"}), 400
     result = process_html_file(html_url)
     return jsonify({"message": result})
+
 
 if __name__ == "__main__":
     app.run(debug=True)

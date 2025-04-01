@@ -13,7 +13,6 @@
       overflow: hidden;
       font-family: Arial, sans-serif;
     }
-    /* Fullscreen video background */
     #bg-video {
       position: fixed;
       top: 0;
@@ -61,12 +60,11 @@
       transition: background 0.3s ease;
     }
     button:hover { background: #218838; }
-    #status {
+    #status, #csvStatus {
       margin-top: 15px;
       font-size: 14px;
     }
-    /* Drag and drop styles */
-    #drop-area {
+    #drop-area, #drop-area-csv {
       border: 2px dashed #ccc;
       border-radius: 10px;
       padding: 30px;
@@ -75,17 +73,58 @@
       margin-top: 20px;
       background: rgba(0,0,0,0.4);
     }
-    #drop-area.hover {
+    #drop-area.hover, #drop-area-csv.hover {
       border-color: #00f;
       background: rgba(0,0,0,0.6);
     }
-    #drop-area p {
+    #drop-area p, #drop-area-csv p {
       margin: 0;
       font-size: 16px;
     }
   </style>
+</head>
+<body>
+
+  <!-- Video background -->
+  <video autoplay muted loop id="bg-video">
+    <source src="{{ video_url }}" type="video/mp4">
+    Your browser does not support HTML5 video.
+  </video>
+
+  <!-- Main container -->
+  <div class="container">
+    <!-- Logo -->
+    <img src="{{ logo_url }}" alt="QINVST Logo" class="logo" />
+
+    <h2>QINVST Data Extractor</h2>
+    
+    <!-- URL input for remote HTML processing -->
+    <input type="text" id="html_url" placeholder="Enter remote file URL">
+    <br>
+    <button onclick="submitUrl()">Extract & Upload</button>
+    
+    <!-- Drag and drop area for HTML files -->
+    <div id="drop-area">
+      <p>Drag and drop an HTML file here or click to select</p>
+      <input type="file" id="fileElem" accept=".html" style="display:none">
+      <button onclick="document.getElementById('fileElem').click()">Select HTML File</button>
+    </div>
+
+    <p id="status"></p>
+
+    <!-- Drag and drop area for CSV files -->
+    <div id="drop-area-csv">
+      <p>Drag and drop a CSV file here or click to select</p>
+      <input type="file" id="csvElem" accept=".csv" style="display:none">
+      <input type="text" id="csvLabel" placeholder="Enter label for CSV" style="margin: 10px 0; width: 80%; padding: 8px;">
+      <button onclick="document.getElementById('csvElem').click()">Select CSV File</button>
+    </div>
+
+    <p id="csvStatus"></p>
+  </div>
+
   <script>
-    // Function to submit URL-based extraction
+    // Submit URL-based HTML extraction
     async function submitUrl() {
       const url = document.getElementById("html_url").value;
       if (!url) {
@@ -102,8 +141,8 @@
       document.getElementById("status").innerText = data.message;
     }
 
-    // Drag and drop file upload functionality
-    window.addEventListener("DOMContentLoaded", function() {
+    // HTML drag-and-drop functionality
+    window.addEventListener("DOMContentLoaded", function () {
       const dropArea = document.getElementById("drop-area");
       const fileInput = document.getElementById("fileElem");
       const statusText = document.getElementById("status");
@@ -122,8 +161,10 @@
         e.preventDefault();
         dropArea.classList.remove("hover");
         const file = e.dataTransfer.files[0];
-        if (file) {
+        if (file && file.name.endsWith(".html")) {
           uploadFile(file);
+        } else {
+          statusText.innerText = "Please upload a valid HTML file.";
         }
       });
 
@@ -132,53 +173,84 @@
           uploadFile(fileInput.files[0]);
         }
       });
+
+      async function uploadFile(file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        statusText.innerText = "Uploading file...";
+        try {
+          const response = await fetch("/upload", {
+            method: "POST",
+            body: formData
+          });
+          const data = await response.json();
+          statusText.innerText = data.message;
+        } catch (err) {
+          statusText.innerText = "File upload failed.";
+          console.error(err);
+        }
+      }
     });
 
-    async function uploadFile(file) {
-      const formData = new FormData();
-      formData.append("file", file);
-      document.getElementById("status").innerText = "Uploading file...";
-      try {
-        const response = await fetch("/upload", {
-          method: "POST",
-          body: formData
-        });
-        const data = await response.json();
-        document.getElementById("status").innerText = data.message;
-      } catch (err) {
-        document.getElementById("status").innerText = "File upload failed.";
-        console.error(err);
+    // CSV drag-and-drop functionality
+    window.addEventListener("DOMContentLoaded", function () {
+      const csvDropArea = document.getElementById("drop-area-csv");
+      const csvInput = document.getElementById("csvElem");
+      const csvStatus = document.getElementById("csvStatus");
+
+      csvDropArea.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        csvDropArea.classList.add("hover");
+      });
+
+      csvDropArea.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        csvDropArea.classList.remove("hover");
+      });
+
+      csvDropArea.addEventListener("drop", (e) => {
+        e.preventDefault();
+        csvDropArea.classList.remove("hover");
+        const file = e.dataTransfer.files[0];
+        if (file && file.name.endsWith(".csv")) {
+          uploadCsv(file);
+        } else {
+          csvStatus.innerText = "Please upload a valid CSV file.";
+        }
+      });
+
+      csvInput.addEventListener("change", () => {
+        if (csvInput.files.length > 0) {
+          uploadCsv(csvInput.files[0]);
+        }
+      });
+
+      async function uploadCsv(file) {
+        const label = document.getElementById("csvLabel").value;
+        if (!label.trim()) {
+          alert("Please enter a label for the CSV upload.");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("label", label);
+        formData.append("user_id", "anonymous"); // Replace with real user logic if needed
+
+        csvStatus.innerText = "Uploading CSV file...";
+        try {
+          const response = await fetch("/upload_csv", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await response.json();
+          csvStatus.innerText = data.message;
+        } catch (err) {
+          console.error(err);
+          csvStatus.innerText = "CSV upload failed.";
+        }
       }
-    }
+    });
   </script>
-</head>
-<body>
-  <!-- Video background -->
-  <video autoplay muted loop id="bg-video">
-    <source src="{{ video_url }}" type="video/mp4">
-    Your browser does not support HTML5 video.
-  </video>
-
-  <!-- Main container -->
-  <div class="container">
-    <!-- Logo -->
-    <img src="{{ logo_url }}" alt="QINVST Logo" class="logo" />
-
-    <h2>QINVST Data Extractor</h2>
-    
-    <!-- URL input for remote processing -->
-    <input type="text" id="html_url" placeholder="Enter remote file URL">
-    <br>
-    <button onclick="submitUrl()">Extract & Upload</button>
-    
-    <!-- Drag and drop file upload area -->
-    <div id="drop-area">
-      <p>Drag and drop an HTML file here or click to select</p>
-      <input type="file" id="fileElem" accept=".html" style="display:none">
-      <button onclick="document.getElementById('fileElem').click()">Select File</button>
-    </div>
-    
-    <p id="status"></p>
-  </div>
 </body>
 </html>

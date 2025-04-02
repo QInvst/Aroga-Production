@@ -223,7 +223,7 @@ def upload_csv():
 
 @app.route("/")
 def index():
-    return render_template("index.html", video_url="/static/dynamic.mp4", logo_url="/static/logo.jpg")
+    return render_template("index.html", logo_url="/static/logo.jpg")
 
 
 @app.route("/process", methods=["POST"])
